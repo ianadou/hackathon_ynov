@@ -1,0 +1,4 @@
+# Le .gitattributes racine envoie tous les *.json dans git-LFS.
+# Ce sous-projet front en a besoin en texte normal (package.json, lock, etc.).
+*.json !filter !diff !merge text
+package-lock.json -diff linguist-generated

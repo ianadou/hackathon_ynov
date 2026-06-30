@@ -1,0 +1,10 @@
+services:
+  web:
+    build: .
+    image: phi-finance-chat
+    container_name: phi-finance-chat
+    ports:
+      - "8080:80"
+    env_file:
+      - .env
+    restart: unless-stopped

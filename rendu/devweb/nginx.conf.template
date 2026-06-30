@@ -1,0 +1,33 @@
+# Servi par nginx. ${INFERENCE_URL} est substitué au démarrage du conteneur
+# (envsubst, filtré sur INFERENCE_URL — les $variables nginx sont préservées).
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # --- En-têtes de sécurité (défense en profondeur) ---
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "no-referrer" always;
+  add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+  # CSP : scripts/connexions same-origin (l'API passe par le proxy /api), polices Google autorisées.
+  add_header Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+
+  # Proxy de l'API d'inférence : le navigateur reste en same-origin (zéro CORS),
+  # l'URL réelle ne quitte pas le serveur.
+  location /api/ {
+    proxy_pass ${INFERENCE_URL};
+    proxy_ssl_server_name on;            # SNI pour un upstream HTTPS
+    proxy_set_header Host $proxy_host;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;                 # streaming NDJSON token-par-token en temps réel
+    proxy_read_timeout 300s;
+  }
+
+  # SPA : toutes les routes retombent sur index.html
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
