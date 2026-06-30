@@ -113,6 +113,21 @@ function lastUserText(messages) {
   return ''
 }
 
+// Fenêtre glissante : n'envoie au modèle que les derniers messages (budget de
+// caractères) → prefill borné, TTFT stable même sur de longues conversations.
+const HISTORY_MAX_CHARS = 6000
+
+function windowMessages(messages, maxChars) {
+  const out = []
+  let total = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    out.unshift(messages[i])
+    total += (messages[i].content || '').length
+    if (total >= maxChars) break
+  }
+  return out
+}
+
 function genAttachmentId() {
   return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
@@ -315,8 +330,9 @@ export default function App() {
     setStreaming(true)
     updateActive([...base, { role: 'assistant', content: '', streaming: true }])
 
+    const windowed = windowMessages(base, HISTORY_MAX_CHARS)
     const wire = [{ role: 'system', content: s.systemPrompt }]
-      .concat(base.map((m) => ({ role: m.role, content: m.content })))
+      .concat(windowed.map((m) => ({ role: m.role, content: m.content })))
     if (images && images.length) wire[wire.length - 1] = { ...wire[wire.length - 1], images }
 
     const req = buildChatRequest({ baseUrl: s.baseUrl, model: s.model, messages: wire, temperature: s.temperature, maxTokens: s.maxTokens })
