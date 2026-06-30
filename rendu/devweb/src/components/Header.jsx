@@ -7,14 +7,16 @@ const STATUS_META = {
   unknown:      { label: 'Inconnu',    color: 'var(--fg-muted)', pulse: false },
 }
 
-export default function Header({ title, status, onRecheck, onToggleSidebar }) {
+export default function Header({ title, status, onRecheck, onToggleSidebar, sidebarOpen }) {
   const meta = STATUS_META[status] || STATUS_META.unknown
 
   return (
     <header className="header">
-      <button type="button" className="ctl ctl--icon header__menu" onClick={onToggleSidebar} title="Menu" aria-label="Ouvrir le menu">
-        <IconMenu />
-      </button>
+      {!sidebarOpen && (
+        <button type="button" className="ctl ctl--icon header__menu" onClick={onToggleSidebar} title="Afficher le menu" aria-label="Afficher le menu">
+          <IconMenu />
+        </button>
+      )}
 
       <div className="header__title" title={title}>{title}</div>
 

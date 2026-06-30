@@ -15,13 +15,9 @@ const DEFAULT_SETTINGS = {
   maxTokens: 2048, // num_predict — filet de sécurité (le prompt impose des réponses brèves)
 
   systemPrompt:
-    "Tu es un conseiller financier et business. Réponds en français, clairement et " +
-    "professionnellement, sur la finance, l'investissement, la comptabilité, la valorisation, " +
-    "la fiscalité et la stratégie d'entreprise. Sois BREF et va à l'essentiel : 3 à 6 phrases " +
-    "maximum, sauf si l'utilisateur demande explicitement un développement détaillé ; n'écris " +
-    "pas de longs essais. Mets en gras les termes clés et n'utilise une courte liste à puces que " +
-    "si c'est vraiment utile. Précise en une phrase les hypothèses ou risques importants. Si une " +
-    "question sort de ton domaine, réponds en une phrase puis recentre sur la finance.",
+    "Tu es un conseiller financier et business. Réponds en français, de façon claire et " +
+    "CONCISE : 3 à 6 phrases maximum, sans long développement (sauf demande explicite). Mets " +
+    "en gras les termes clés. Si la question sort de la finance, réponds en une phrase puis recentre.",
 }
 
 const SUGGESTIONS = [
@@ -312,38 +308,16 @@ export default function App() {
     if (!rafRef.current) rafRef.current = requestAnimationFrame(flushDelta)
   }
 
-  const send = useCallback(async (text) => {
-    const typed = (text != null ? text : input).trim()
-    const atts = attachments
-    if ((!typed && atts.length === 0) || streaming) return
-
+  // Streaming partagé par envoi/régénération (`base` finit par un message user).
+  const streamChat = useCallback(async (base, images) => {
     const s = settingsRef.current
-    const prior = (conversations.find((c) => c.id === activeIdRef.current)?.messages) || []
-
-    let composed = typed
-    for (const a of atts.filter((x) => x.kind === 'text')) {
-      composed += `\n\n--- Fichier joint : ${a.name} ---\n${a.text}`
-    }
-    const images = atts.filter((x) => x.kind === 'image').map((x) => x.base64)
-    const attMeta = atts.map((x) => ({ name: x.name, kind: x.kind }))
-
-    const userMsg = {
-      role: 'user',
-      content: composed || '(pièces jointes)',
-      ...(attMeta.length ? { attachments: attMeta } : {}),
-    }
-
-    updateActive((m) => [...m, userMsg, { role: 'assistant', content: '', streaming: true }])
-    setInput('')
-    setAttachments([])
     setError(null)
     setStreaming(true)
+    updateActive([...base, { role: 'assistant', content: '', streaming: true }])
 
-    const wireUser = { role: 'user', content: composed || '(pièces jointes)' }
-    if (images.length) wireUser.images = images
     const wire = [{ role: 'system', content: s.systemPrompt }]
-      .concat(prior.map((m) => ({ role: m.role, content: m.content })))
-      .concat([wireUser])
+      .concat(base.map((m) => ({ role: m.role, content: m.content })))
+    if (images && images.length) wire[wire.length - 1] = { ...wire[wire.length - 1], images }
 
     const req = buildChatRequest({ baseUrl: s.baseUrl, model: s.model, messages: wire, temperature: s.temperature, maxTokens: s.maxTokens })
     const ctrl = new AbortController()
@@ -353,7 +327,6 @@ export default function App() {
       const res = await fetch(req.url, { ...req.init, signal: ctrl.signal })
       if (!res.ok) throw new Error('HTTP ' + res.status)
       if (!res.body) throw new Error('Pas de flux de réponse du serveur')
-
       await readChatStream(res, appendDelta)
       setStatus('connected')
     } catch (err) {
@@ -361,7 +334,6 @@ export default function App() {
         // arrêt utilisateur — on garde ce qui a déjà été streamé
       } else {
         setError(friendlyError(err))
-        // "Hors ligne" seulement sur panne réseau (TypeError) ; un statut HTTP = serveur joignable.
         setStatus(err && err.name === 'TypeError' ? 'disconnected' : 'connected')
       }
     } finally {
@@ -383,7 +355,38 @@ export default function App() {
         return out
       })
     }
-  }, [input, attachments, streaming, conversations, updateActive])
+  }, [updateActive])
+
+  const send = useCallback((text) => {
+    const typed = (text != null ? text : input).trim()
+    const atts = attachments
+    if ((!typed && atts.length === 0) || streaming) return
+
+    const prior = (conversationsRef.current.find((c) => c.id === activeIdRef.current)?.messages) || []
+    let composed = typed
+    for (const a of atts.filter((x) => x.kind === 'text')) {
+      composed += `\n\n--- Fichier joint : ${a.name} ---\n${a.text}`
+    }
+    const images = atts.filter((x) => x.kind === 'image').map((x) => x.base64)
+    const attMeta = atts.map((x) => ({ name: x.name, kind: x.kind }))
+    const userMsg = {
+      role: 'user',
+      content: composed || '(pièces jointes)',
+      ...(attMeta.length ? { attachments: attMeta } : {}),
+    }
+
+    setInput('')
+    setAttachments([])
+    streamChat([...prior, userMsg], images)
+  }, [input, attachments, streaming, streamChat])
+
+  const regenerate = useCallback((index) => {
+    if (streaming) return
+    const msgs = conversationsRef.current.find((c) => c.id === activeIdRef.current)?.messages || []
+    const base = msgs.slice(0, index)
+    if (!base.length || base[base.length - 1].role !== 'user') return
+    streamChat(base, null)
+  }, [streaming, streamChat])
 
   const stop = useCallback(() => { if (ctrlRef.current) ctrlRef.current.abort() }, [])
 
@@ -459,6 +462,7 @@ export default function App() {
           status={status}
           onRecheck={checkConnection}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          sidebarOpen={sidebarOpen}
         />
 
         <MessageList
@@ -467,6 +471,7 @@ export default function App() {
           suggestions={SUGGESTIONS}
           onPick={(t) => send(t)}
           error={error}
+          onRegenerate={regenerate}
         />
 
         <Composer

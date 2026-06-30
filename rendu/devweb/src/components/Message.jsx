@@ -1,9 +1,9 @@
 import { memo, useState } from 'react'
 import { renderMarkdown } from '../lib/markdown.js'
 import { sanitizeHtml } from '../lib/sanitize.js'
-import { IconCopy, IconCheck, IconFile } from './icons.jsx'
+import { IconCopy, IconCheck, IconFile, IconRefresh } from './icons.jsx'
 
-function Message({ msg }) {
+function Message({ msg, index, onRegenerate }) {
   if (msg.role === 'user') {
     return (
       <div className="msg msg--user">
@@ -23,26 +23,24 @@ function Message({ msg }) {
       </div>
     )
   }
-  return <AssistantMessage msg={msg} />
+  return <AssistantMessage msg={msg} index={index} onRegenerate={onRegenerate} />
 }
 
 export default memo(Message)
 
-// N'affiche pas le contenu brut des fichiers injectés dans la bulle utilisateur.
 function stripFileDump(content) {
   const idx = content.indexOf('\n\n--- Fichier joint :')
   return idx >= 0 ? content.slice(0, idx) : content
 }
 
-function AssistantMessage({ msg }) {
+function AssistantMessage({ msg, index, onRegenerate }) {
   const [copied, setCopied] = useState(false)
 
-  // Indicateur "typing" tant que rien n'est arrivé.
   if (msg.streaming && !msg.content) {
     return (
       <div className="msg msg--assistant">
         <div className="msg__avatar"><PhiAvatar /></div>
-        <div className="msg__body">
+        <div className="msg__col">
           <div className="typing">
             <span className="typing__dot" />
             <span className="typing__dot" />
@@ -58,7 +56,9 @@ function AssistantMessage({ msg }) {
     return (
       <div className="msg msg--assistant">
         <div className="msg__avatar"><PhiAvatar /></div>
-        <div className="msg__body prose" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="msg__col">
+          <div className="msg__body prose" dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
       </div>
     )
   }
@@ -72,6 +72,7 @@ function AssistantMessage({ msg }) {
     })
   }
 
+  // Copie d'un bloc de code via son bouton "Copier" (délégation).
   const onBodyClick = (e) => {
     const btn = e.target.closest?.('.md-copy')
     if (!btn) return
@@ -87,13 +88,21 @@ function AssistantMessage({ msg }) {
   return (
     <div className="msg msg--assistant">
       <div className="msg__avatar"><PhiAvatar /></div>
-      <div className="msg__body prose" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: html }} />
-      {msg.content && (
-        <button type="button" className="msg__copy" onClick={copyAll} title="Copier la réponse">
-          {copied ? <IconCheck /> : <IconCopy />}
-          {copied ? 'Copié' : 'Copier'}
-        </button>
-      )}
+      <div className="msg__col">
+        <div className="msg__body prose" onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: html }} />
+        {msg.content && (
+          <div className="msg__actions">
+            <button type="button" className="msg__act" onClick={copyAll} title="Copier la réponse">
+              {copied ? <IconCheck /> : <IconCopy />}
+              <span>{copied ? 'Copié' : 'Copier'}</span>
+            </button>
+            <button type="button" className="msg__act" onClick={() => onRegenerate?.(index)} title="Régénérer la réponse">
+              <IconRefresh />
+              <span>Régénérer</span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

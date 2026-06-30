@@ -2,7 +2,7 @@ import Message from './Message.jsx'
 import PhiGlyph from './PhiGlyph.jsx'
 import { IconAlert } from './icons.jsx'
 
-export default function MessageList({ scrollRef, messages, suggestions, onPick, error }) {
+export default function MessageList({ scrollRef, messages, suggestions, onPick, error, onRegenerate }) {
   const isEmpty = messages.length === 0
 
   return (
@@ -27,7 +27,7 @@ export default function MessageList({ scrollRef, messages, suggestions, onPick, 
         )}
 
         {messages.map((msg, i) => (
-          <Message key={i} msg={msg} />
+          <Message key={i} msg={msg} index={i} onRegenerate={onRegenerate} />
         ))}
 
         {error && (
